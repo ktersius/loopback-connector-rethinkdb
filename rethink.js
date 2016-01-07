@@ -403,7 +403,9 @@ RethinkDB.prototype.all = function all(model, filter, options, callback) {
 
     var promise = r.db(_this.database).table(model);
 
-    var idName = this.idName(model)
+    if (filter.where) {
+        promise = buildWhere(_this, model, filter.where, promise)//_processWhere(_this, model, filter.where, promise);
+    }
 
     if (filter.order) {
         var keys = filter.order;
@@ -421,18 +423,7 @@ RethinkDB.prototype.all = function all(model, filter, options, callback) {
         });
     } else {
         // default sort by id
-        promise = promise.orderBy({ "index": r.asc("id") });
-    }
-
-    if (filter.where) {
-        if (filter.where[idName]) {
-            var id = filter.where[idName];
-            delete filter.where[idName];
-            filter.where.id = id;
-        }
-        promise = buildWhere(_this, model, filter.where, promise)
-        if (promise === null)
-            return callback && callback(null, [])
+        promise = promise.orderBy(r.asc("id"));
     }
 
     if (filter.skip) {
@@ -445,9 +436,7 @@ RethinkDB.prototype.all = function all(model, filter, options, callback) {
         promise = promise.limit(filter.limit);
     }
 
-    var rQuery = promise.toString()
-
-    //console.log(rQuery)
+    //console.log(promise.toString())
 
     promise.run(client, function(error, cursor) {
 
@@ -467,10 +456,20 @@ RethinkDB.prototype.all = function all(model, filter, options, callback) {
                 _expandResult(element, _keys);
             });
 
-            if (filter && filter.include && filter.include.length > 0) {
-                _model.include(data, filter.include, options, callback);
+            if (filter && filter.include){
+
+                if(Array.isArray(filter.include)){
+                    _model.include(data, filter.include, options, callback);
+                }else if(typeof filter.include == 'object'){
+                    var tempInclude = [];
+                    tempInclude.push(filter.include.relation)
+                    _model.include(data, tempInclude, options, callback);
+                }else{
+                     _model.include(data, [filter.include], options, callback);
+                }
+
             } else {
-                callback && callback(null, data, rQuery);
+                callback && callback(null, data);
             }
         });
     });
